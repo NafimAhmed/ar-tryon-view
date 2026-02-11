@@ -4,6 +4,10 @@
 
 A lightweight Flutter plugin that embeds a native Android camera preview using **PlatformView + CameraX** and supports **transparent PNG overlay effects** (e.g., glasses, masks, accessories). This is a great starting point for building **virtual try-on** experiences for e-commerce apps.
 
+![Linear Date Picker Demo](https://media.giphy.com/media/iEhGnZhkzoSOF8JNyD/giphy.gif)
+
+![Linear Date Picker Demo](https://media.giphy.com/media/h6A88MsuZWu7mTN8Zy/giphy.gif)
+
 ## Features
 
 - Embedded native Android camera preview using PlatformView + CameraX.

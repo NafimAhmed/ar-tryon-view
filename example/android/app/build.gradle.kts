@@ -10,7 +10,7 @@ android {
     // ✅ NDK mismatch fix (26.3 -> 27.0.12077973)
     ndkVersion = "27.0.12077973"
 
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.nafim.ar_tryon_view_example"
