@@ -27,7 +27,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  ar_tryon_view: ^0.0.2
+  ar_tryon_view: ^0.0.3
 
 
 ```
@@ -57,6 +57,19 @@ android {
 
 ```
 
+
+Add your assets in pubspec.yaml file 
+
+```yaml
+
+
+flutter:
+  assets:
+    - assets/glasses_01.png
+
+
+
+```
 
 
 Set .png assets here
