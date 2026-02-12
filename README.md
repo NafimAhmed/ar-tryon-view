@@ -40,118 +40,107 @@ Take permission from AndroidManifest.xml file
 
 ```
 
-Then use this code
+Make sure the /android/app/build.gradle.kts file contain this
+
+```kotlin
+
+android {
+    // Recommended to avoid NDK mismatch with some plugins
+    ndkVersion = "27.0.12077973"
+
+    defaultConfig {
+        // Required for this plugin (CameraX / platform view pipeline)
+        minSdk = 24
+    }
+}
+
+
+```
+
+
+
+Set .png assets here
 
 
 ```dart
 
-import 'package:flutter/material.dart';
-import 'package:firebase_notification_helper/firebase_notification_helper.dart';
-
-class NotificationSenderPage extends StatefulWidget {
-  const NotificationSenderPage({super.key});
-
-  @override
-  State<NotificationSenderPage> createState() => _NotificationSenderPageState();
+@override
+Widget build(BuildContext context) {
+  return Scaffold(
+    body: ElevatedButton(
+      onPressed: () => controller?.setEffectAsset('assets/glasses_01.png'),
+      child: const Text('Effect'),
+    ),
+  );
 }
 
-class _NotificationSenderPageState extends State<NotificationSenderPage> {
-  String token = "";
-  String response = "";
-  final keyController = TextEditingController();
-  final titleController = TextEditingController(text: "Test Notification");
-  final bodyController = TextEditingController(
-    text: "Hello from firebase_notification_helper!",
-  );
+
+
+```
+
+Just like this: 
+
+```dart
+
+import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:ar_tryon_view/ar_tryon_view.dart';
+
+class TryOnScreen extends StatefulWidget {
+  const TryOnScreen({super.key});
 
   @override
-  void initState() {
-    super.initState();
-    _loadToken();
-  }
+  State<TryOnScreen> createState() => _TryOnScreenState();
+}
 
-  Future<void> _loadToken() async {
-    final t = await FirebaseNotificationHelper.getToken();
-    setState(() => token = t ?? "");
-  }
+class _TryOnScreenState extends State<TryOnScreen> {
+  ArTryOnController? controller;
 
-  Future<void> _sendNotification() async {
-    if (keyController.text.isEmpty) return;
-
-    final res = await FirebaseNotificationHelper.sendNotification(
-      serverKey: keyController.text.trim(),
-      targetToken: token,
-      title: titleController.text.trim(),
-      body: bodyController.text.trim(),
-    );
-
-    setState(() => response = res.toString());
+  Future<void> _startSafely() async {
+    final status = await Permission.camera.request();
+    if (!status.isGranted) return;
+    await controller?.start();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("FCM Sender")),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          FirebaseNotificationHelper.showLocalNotification(
-            title: titleController.text.trim(),
-            body: bodyController.text.trim(),
-          );
-        },
-        child: const Icon(Icons.notifications),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            const Text("Your FCM Token:"),
-            SelectableText(token),
-            const SizedBox(height: 16),
-
-            TextField(
-              controller: keyController,
-              decoration: const InputDecoration(
-                labelText: "Server Key",
-                border: OutlineInputBorder(),
-              ),
+      appBar: AppBar(title: const Text('AR Try-on Demo')),
+      body: Column(
+        children: [
+          Expanded(
+            child: ArTryOnView(
+              onCreated: (c) async {
+                controller = c;
+                await _startSafely();
+              },
             ),
-
-            const SizedBox(height: 12),
-
-            TextField(
-              controller: titleController,
-              decoration: const InputDecoration(
-                labelText: "Notification Title",
-                border: OutlineInputBorder(),
-              ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Wrap(
+              spacing: 10,
+              children: [
+                ElevatedButton(
+                  onPressed: _startSafely,
+                  child: const Text('Start'),
+                ),
+                ElevatedButton(
+                  onPressed: () => controller?.stop(),
+                  child: const Text('Stop'),
+                ),
+                ElevatedButton(
+                  onPressed: () => controller?.setEffectAsset('assets/glasses_01.png'),
+                  child: const Text('Effect'),
+                ),
+                ElevatedButton(
+                  onPressed: () => controller?.clearEffect(),
+                  child: const Text('Clear'),
+                ),
+              ],
             ),
-
-            const SizedBox(height: 12),
-
-            TextField(
-              controller: bodyController,
-              maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: "Notification Body",
-                border: OutlineInputBorder(),
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            ElevatedButton(
-              onPressed: _sendNotification,
-              child: const Text("Send Notification"),
-            ),
-
-            const SizedBox(height: 16),
-            const Text("Response:"),
-            Expanded(
-              child: SingleChildScrollView(child: Text(response)),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -159,100 +148,7 @@ class _NotificationSenderPageState extends State<NotificationSenderPage> {
 
 
 
-
-
 ```
-
-## Upgrade this android part in /android/build.gradle.kts
-
-Then import
-
-```kotlin
-
-buildscript {
-    repositories {
-        google()
-        mavenCentral()
-    }
-    dependencies {
-        classpath("com.google.gms:google-services:4.4.2")
-    }
-}
-
-
-
-```
-
-
-
-
-## Upgrade this android part in /android/app/build.gradle.kts
-
-Then import
-
-```kotlin
-
-plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("com.google.gms.google-services")   // REQUIRED
-    id("dev.flutter.flutter-gradle-plugin")
-}
-
-
-android {
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
-        isCoreLibraryDesugaringEnabled = true
-    }
-
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
-    }
-}
-
-dependencies {
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
-}
-
-
-```
-
-## Initialization
-
-Then import
-
-```dart
-import 'package:flutter/material.dart';
-import 'package:firebase_notification_helper/firebase_notification_helper.dart';
-
-Future<void> main() async {
-  await FirebaseNotificationHelper.initialize();
-  runApp(const MyApp());
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      home: NotificationSenderPage(),
-    );
-  }
-}
-
-```
-
-
-
-
-
-
-
-
-
 
 
 
