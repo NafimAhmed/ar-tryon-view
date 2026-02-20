@@ -19,7 +19,7 @@ A lightweight Flutter plugin that embeds a native Android camera preview using *
 ## Platform Support
 
 - Android: ✅ Supported
-- iOS: ⏳ Not implemented yet (planned)
+- iOS: ✅ Supported (AVFoundation camera preview + PNG overlay)
 
 ## Installation
 
@@ -27,7 +27,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  ar_tryon_view: ^0.0.3
+  ar_tryon_view: ^0.0.4
 
 
 ```
@@ -163,5 +163,13 @@ class _TryOnScreenState extends State<TryOnScreen> {
 
 ```
 
+## iOS Setup
 
+### 1) Add Camera Permission to Info.plist
+
+Open: `ios/Runner/Info.plist` and add inside `<dict> ... </dict>`:
+
+```xml
+<key>NSCameraUsageDescription</key>
+<string>This app needs camera access for AR try-on preview.</string>
 
