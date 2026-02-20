@@ -1,8 +1,5 @@
 name: ar_tryon_view
-description: >
-  Flutter plugin that embeds a native Android camera preview using PlatformView + CameraX
-  and supports transparent PNG overlay effects (e.g., glasses, masks, accessories) for
-  virtual try-on experiences in e-commerce apps.
+description: Native camera preview with transparent PNG overlay effects for Flutter AR try-on (Android+iOS).
 topics:
   - camera
   - camerax
@@ -10,6 +7,7 @@ topics:
   - overlay
   - e-commerce
 version: 0.0.4
+license: Apache-2.0
 homepage: https://github.com/NafimAhmed/ar-tryon-view
 repository: https://github.com/NafimAhmed/ar-tryon-view
 
