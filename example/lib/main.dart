@@ -97,7 +97,6 @@
 
 
 
-
 import 'package:ar_tryon_view/ar_tryon_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -115,13 +114,16 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
+  final GlobalKey<ScaffoldMessengerState> _messengerKey =
+  GlobalKey<ScaffoldMessengerState>();
+
   ArTryOnController? controller;
   String statusText = 'Waiting...';
   bool _starting = false;
 
   Future<void> _showMessage(String message) async {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    _messengerKey.currentState?.hideCurrentSnackBar();
+    _messengerKey.currentState?.showSnackBar(
       SnackBar(content: Text(message)),
     );
   }
@@ -132,6 +134,7 @@ class _MyAppState extends State<MyApp> {
 
     try {
       final status = await Permission.camera.request();
+
       if (!status.isGranted) {
         if (!mounted) return;
         setState(() => statusText = 'Camera permission denied');
@@ -171,7 +174,7 @@ class _MyAppState extends State<MyApp> {
   Future<void> _loadOnlineModel() async {
     try {
       await controller?.loadModelUrl(
-        'https://your-domain.com/models/fox_mask.glb',
+        'https://modelviewer.dev/shared-assets/models/Astronaut.glb',
         scale: 1.0,
       );
 
@@ -230,6 +233,7 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      scaffoldMessengerKey: _messengerKey,
       home: Scaffold(
         appBar: AppBar(
           title: const Text('AR Try-on Demo'),
@@ -243,7 +247,10 @@ class _MyAppState extends State<MyApp> {
                   if (mounted) {
                     setState(() => statusText = 'View created');
                   }
-                  await _startSafely();
+
+                  WidgetsBinding.instance.addPostFrameCallback((_) async {
+                    await _startSafely();
+                  });
                 },
               ),
             ),
