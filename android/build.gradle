@@ -1,3 +1,84 @@
+//
+//group 'com.nafim.ar_tryon_view'
+//version '1.0-SNAPSHOT'
+//
+//buildscript {
+//    ext.kotlin_version = '2.1.0'
+//    repositories {
+//        google()
+//        mavenCentral()
+//    }
+//    dependencies {
+//        classpath 'com.android.tools.build:gradle:8.7.3'
+//        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+//    }
+//}
+//
+//allprojects {
+//    repositories {
+//        google()
+//        mavenCentral()
+//    }
+//}
+//
+//apply plugin: 'com.android.library'
+//apply plugin: 'kotlin-android'
+//
+//android {
+//    namespace 'com.nafim.ar_tryon_view'
+//    compileSdk 35
+//
+//    defaultConfig {
+//        // ✅ Align with example app (CameraX + future ARCore)
+//        minSdk 24
+//    }
+//
+//    compileOptions {
+//        sourceCompatibility JavaVersion.VERSION_11
+//        targetCompatibility JavaVersion.VERSION_11
+//    }
+//
+//    kotlinOptions {
+//        jvmTarget = '11'
+//    }
+//
+//    sourceSets {
+//        main.java.srcDirs += 'src/main/kotlin'
+//        test.java.srcDirs += 'src/test/kotlin'
+//    }
+//
+//    testOptions {
+//        unitTests.all {
+//            useJUnitPlatform()
+//            testLogging {
+//                events "passed", "skipped", "failed", "standardOut", "standardError"
+//                outputs.upToDateWhen { false }
+//                showStandardStreams = true
+//            }
+//        }
+//    }
+//}
+//
+//dependencies {
+//    // ✅ CameraX preview (Start চাপলে ক্যামেরা দেখানোর জন্য)
+//    def camerax_version = "1.5.3"
+//    implementation "androidx.camera:camera-camera2:$camerax_version"
+//    implementation "androidx.camera:camera-lifecycle:$camerax_version"
+//    implementation "androidx.camera:camera-view:$camerax_version"
+//    implementation "com.gorisse.thomas.sceneform:sceneform:1.23.0"
+//
+//    testImplementation "org.jetbrains.kotlin:kotlin-test"
+//    testImplementation "org.mockito:mockito-core:5.0.0"
+//}
+
+
+
+
+
+
+
+
+
 
 group 'com.nafim.ar_tryon_view'
 version '1.0-SNAPSHOT'
@@ -29,7 +110,6 @@ android {
     compileSdk 35
 
     defaultConfig {
-        // ✅ Align with example app (CameraX + future ARCore)
         minSdk 24
     }
 
@@ -46,25 +126,11 @@ android {
         main.java.srcDirs += 'src/main/kotlin'
         test.java.srcDirs += 'src/test/kotlin'
     }
-
-    testOptions {
-        unitTests.all {
-            useJUnitPlatform()
-            testLogging {
-                events "passed", "skipped", "failed", "standardOut", "standardError"
-                outputs.upToDateWhen { false }
-                showStandardStreams = true
-            }
-        }
-    }
 }
 
 dependencies {
-    // ✅ CameraX preview (Start চাপলে ক্যামেরা দেখানোর জন্য)
-    def camerax_version = "1.5.3"
-    implementation "androidx.camera:camera-camera2:$camerax_version"
-    implementation "androidx.camera:camera-lifecycle:$camerax_version"
-    implementation "androidx.camera:camera-view:$camerax_version"
+    implementation "com.gorisse.thomas.sceneform:core:1.23.0"
+    implementation "com.gorisse.thomas.sceneform:ux:1.23.0"
 
     testImplementation "org.jetbrains.kotlin:kotlin-test"
     testImplementation "org.mockito:mockito-core:5.0.0"

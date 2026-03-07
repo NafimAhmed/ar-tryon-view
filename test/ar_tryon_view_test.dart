@@ -20,7 +20,7 @@ void main() {
   });
 
   test('getPlatformVersion', () async {
-    ArTryonView arTryonViewPlugin = ArTryonView();
+    ArTryOnView arTryonViewPlugin = ArTryOnView();
     MockArTryonViewPlatform fakePlatform = MockArTryonViewPlatform();
     ArTryonViewPlatform.instance = fakePlatform;
 
