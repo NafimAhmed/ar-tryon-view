@@ -77,8 +77,6 @@
 
 
 
-
-
 group 'com.nafim.ar_tryon_view'
 version '1.0-SNAPSHOT'
 
@@ -132,6 +130,8 @@ dependencies {
     implementation "androidx.camera:camera-camera2:$camerax_version"
     implementation "androidx.camera:camera-lifecycle:$camerax_version"
     implementation "androidx.camera:camera-view:$camerax_version"
+
+    implementation "com.google.mediapipe:tasks-vision:latest.release"
 
     testImplementation "org.jetbrains.kotlin:kotlin-test"
     testImplementation "org.mockito:mockito-core:5.0.0"

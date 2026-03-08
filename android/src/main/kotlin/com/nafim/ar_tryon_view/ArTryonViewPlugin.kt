@@ -518,8 +518,6 @@
 
 
 
-
-
 package com.nafim.ar_tryon_view
 
 import android.Manifest
@@ -527,15 +525,19 @@ import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.util.Log
 import android.view.View
 import android.widget.FrameLayout
 import androidx.annotation.NonNull
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import com.google.mediapipe.framework.image.MediaImageBuilder
+import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
@@ -545,6 +547,9 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.StandardMessageCodec
 import io.flutter.plugin.platform.PlatformView
 import io.flutter.plugin.platform.PlatformViewFactory
+import java.io.File
+import java.io.FileOutputStream
+import java.util.concurrent.Executors
 
 class ArTryonViewPlugin : FlutterPlugin, ActivityAware {
 
@@ -555,7 +560,10 @@ class ArTryonViewPlugin : FlutterPlugin, ActivityAware {
       "ar_tryon_view/native_view",
       ArTryOnViewFactory(
         messenger = binding.binaryMessenger,
-        activityProvider = { activity }
+        activityProvider = { activity },
+        assetLookup = { subPath ->
+          binding.flutterAssets.getAssetFilePathBySubpath(subPath)
+        }
       )
     )
   }
@@ -581,7 +589,8 @@ class ArTryonViewPlugin : FlutterPlugin, ActivityAware {
 
 private class ArTryOnViewFactory(
   private val messenger: BinaryMessenger,
-  private val activityProvider: () -> Activity?
+  private val activityProvider: () -> Activity?,
+  private val assetLookup: (String) -> String,
 ) : PlatformViewFactory(StandardMessageCodec.INSTANCE) {
 
   override fun create(context: Context, viewId: Int, args: Any?): PlatformView {
@@ -589,7 +598,8 @@ private class ArTryOnViewFactory(
       context = context,
       messenger = messenger,
       viewId = viewId,
-      activityProvider = activityProvider
+      activityProvider = activityProvider,
+      assetLookup = assetLookup
     )
   }
 }
@@ -598,8 +608,11 @@ private class ArTryOnPlatformView(
   private val context: Context,
   messenger: BinaryMessenger,
   viewId: Int,
-  private val activityProvider: () -> Activity?
+  private val activityProvider: () -> Activity?,
+  private val assetLookup: (String) -> String,
 ) : PlatformView, MethodChannel.MethodCallHandler {
+
+  private val tag = "ArTryOn"
 
   private val container = FrameLayout(context).apply {
     setBackgroundColor(0xFF000000.toInt())
@@ -619,9 +632,13 @@ private class ArTryOnPlatformView(
   }
 
   private val channel = MethodChannel(messenger, "ar_tryon_view/method_$viewId")
+  private val cameraExecutor = Executors.newSingleThreadExecutor()
 
   private var cameraProvider: ProcessCameraProvider? = null
-  private var isStarted = false
+  private var tracker: FaceTracker? = null
+  private var trackerEnabled = false
+  private var currentScale = 1.0f
+  private var pendingModelUri: Uri? = null
 
   init {
     container.addView(previewView)
@@ -633,6 +650,10 @@ private class ArTryOnPlatformView(
   override fun dispose() {
     channel.setMethodCallHandler(null)
     stopCameraInternal()
+    tracker?.close()
+    tracker = null
+    trackerEnabled = false
+    cameraExecutor.shutdown()
   }
 
   override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
@@ -643,26 +664,56 @@ private class ArTryOnPlatformView(
         result.success(null)
       }
       "loadModelAsset" -> {
-        result.error(
-          "NOT_SUPPORTED_IN_FLUTTER_ACTIVITY_MODE",
-          "This FlutterActivity-compatible version supports camera preview only. Face-anchored 3D model tracking needs a different native architecture.",
-          null
-        )
+        val args = call.arguments as? Map<String, Any?>
+        val asset = args?.get("asset") as? String
+        currentScale = (args?.get("scale") as? Number)?.toFloat() ?: 1.0f
+
+        if (asset.isNullOrBlank()) {
+          result.error("ARG_ERROR", "Missing asset path.", null)
+          return
+        }
+
+        try {
+          val file = materializeFlutterAsset(asset)
+          pendingModelUri = Uri.fromFile(file)
+          result.error(
+            "MODEL_RENDER_NOT_READY",
+            "Camera preview is working. 3D render binding is not added yet in this stable build.",
+            null
+          )
+        } catch (e: Exception) {
+          result.error("MODEL_ASSET_FAILED", e.message, null)
+        }
       }
+
       "loadModelUrl" -> {
+        val args = call.arguments as? Map<String, Any?>
+        val url = args?.get("url") as? String
+        currentScale = (args?.get("scale") as? Number)?.toFloat() ?: 1.0f
+
+        if (url.isNullOrBlank()) {
+          result.error("ARG_ERROR", "Missing model url.", null)
+          return
+        }
+
+        pendingModelUri = Uri.parse(url)
         result.error(
-          "NOT_SUPPORTED_IN_FLUTTER_ACTIVITY_MODE",
-          "This FlutterActivity-compatible version supports camera preview only. Face-anchored 3D model tracking needs a different native architecture.",
+          "MODEL_RENDER_NOT_READY",
+          "Camera preview is working. 3D render binding is not added yet in this stable build.",
           null
         )
       }
+
       "clearModel" -> {
+        pendingModelUri = null
         result.success(null)
       }
+
       "dispose" -> {
         dispose()
         result.success(null)
       }
+
       else -> result.notImplemented()
     }
   }
@@ -690,35 +741,55 @@ private class ArTryOnPlatformView(
       return
     }
 
-    val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
-    cameraProviderFuture.addListener(
-      {
-        try {
-          cameraProvider = cameraProviderFuture.get()
+    initTrackerSafely()
 
-          val preview = Preview.Builder().build().also {
-            it.setSurfaceProvider(previewView.surfaceProvider)
-          }
+    val future = ProcessCameraProvider.getInstance(context)
+    future.addListener({
+      try {
+        cameraProvider = future.get()
 
-          val selector = CameraSelector.Builder()
-            .requireLensFacing(CameraSelector.LENS_FACING_FRONT)
-            .build()
-
-          cameraProvider?.unbindAll()
-          cameraProvider?.bindToLifecycle(
-            lifecycleOwner,
-            selector,
-            preview
-          )
-
-          isStarted = true
-          result.success(null)
-        } catch (e: Exception) {
-          result.error("CAMERA_START_FAILED", e.message, null)
+        val preview = Preview.Builder().build().also {
+          it.setSurfaceProvider(previewView.surfaceProvider)
         }
-      },
-      ContextCompat.getMainExecutor(context)
-    )
+
+        val analysis = ImageAnalysis.Builder()
+          .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+          .build()
+
+        analysis.setAnalyzer(cameraExecutor) { imageProxy ->
+          try {
+            val mediaImage = imageProxy.image
+            if (trackerEnabled && mediaImage != null) {
+              val mpImage = MediaImageBuilder(mediaImage).build()
+              tracker?.detectAsync(
+                mpImage,
+                imageProxy.imageInfo.timestamp / 1_000_000
+              )
+            }
+          } catch (e: Exception) {
+            Log.e(tag, "Image analysis failed: ${e.message}", e)
+          } finally {
+            imageProxy.close()
+          }
+        }
+
+        val selector = CameraSelector.Builder()
+          .requireLensFacing(CameraSelector.LENS_FACING_FRONT)
+          .build()
+
+        cameraProvider?.unbindAll()
+        cameraProvider?.bindToLifecycle(
+          lifecycleOwner,
+          selector,
+          preview,
+          analysis
+        )
+
+        result.success(null)
+      } catch (e: Exception) {
+        result.error("CAMERA_START_FAILED", e.message, null)
+      }
+    }, ContextCompat.getMainExecutor(context))
   }
 
   private fun stopCameraInternal() {
@@ -727,6 +798,78 @@ private class ArTryOnPlatformView(
     } catch (_: Exception) {
     }
     cameraProvider = null
-    isStarted = false
+  }
+
+  private fun initTrackerSafely() {
+    if (tracker != null || trackerEnabled) return
+
+    if (!hasLikelyValidTaskModel("face_landmarker.task")) {
+      trackerEnabled = false
+      Log.w(tag, "face_landmarker.task missing or too small. Tracker disabled.")
+      return
+    }
+
+    try {
+      tracker = FaceTracker(
+        context = context,
+        onResult = { result: FaceLandmarkerResult ->
+          onFaceResult(result)
+        },
+        onError = { error: RuntimeException ->
+          Log.e(tag, "Face tracker error: ${error.message}", error)
+        }
+      )
+      trackerEnabled = true
+      Log.d(tag, "Face tracker initialized.")
+    } catch (e: Exception) {
+      trackerEnabled = false
+      tracker = null
+      Log.e(tag, "Tracker init failed: ${e.message}", e)
+    }
+  }
+
+  private fun hasLikelyValidTaskModel(assetName: String): Boolean {
+    return try {
+      context.resources.assets.open(assetName).use { input ->
+        val size = input.available()
+        size > 100 * 1024
+      }
+    } catch (_: Exception) {
+      false
+    }
+  }
+
+  private fun onFaceResult(result: FaceLandmarkerResult) {
+    if (result.faceLandmarks().isEmpty()) return
+
+    val matrixes = result.facialTransformationMatrixes()
+    if (matrixes.isPresent && matrixes.get().isNotEmpty()) {
+      val first = matrixes.get()[0]
+      Log.d(
+        tag,
+        "Face detected. matrixSize=${first.size}, scale=$currentScale, pendingModel=$pendingModelUri"
+      )
+    } else {
+      Log.d(tag, "Face detected without transform matrix.")
+    }
+  }
+
+  private fun materializeFlutterAsset(assetPath: String): File {
+    val lookupKey = assetLookup(assetPath)
+    val safeName = "model_${lookupKey.hashCode()}_${assetPath.substringAfterLast('/')}"
+    val outDir = File(context.cacheDir, "ar_tryon_models").apply { mkdirs() }
+    val outFile = File(outDir, safeName)
+
+    if (outFile.exists() && outFile.length() > 0L) {
+      return outFile
+    }
+
+    context.resources.assets.open(lookupKey).use { input ->
+      FileOutputStream(outFile).use { output ->
+        input.copyTo(output)
+      }
+    }
+
+    return outFile
   }
 }
