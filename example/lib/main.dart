@@ -87,7 +87,6 @@
 //   }
 // }
 
-
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:ar_tryon_view/ar_tryon_view.dart';
@@ -122,6 +121,7 @@ class TryOnScreen extends StatefulWidget {
 class _TryOnScreenState extends State<TryOnScreen> {
   ArTryOnController? controller;
   bool _starting = false;
+  bool _showGlbMask = false;
 
   Future<void> _startSafely() async {
     if (_starting) return;
@@ -142,9 +142,9 @@ class _TryOnScreenState extends State<TryOnScreen> {
       await controller?.start();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Start failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Start failed: $e')));
     } finally {
       _starting = false;
     }
@@ -165,6 +165,18 @@ class _TryOnScreenState extends State<TryOnScreen> {
         children: [
           Expanded(
             child: ArTryOnView(
+              glbMask: _showGlbMask
+                  ? const ArTryOnGlbMask.asset(
+                      'assets/mafia_mask.glb',
+                      alt: 'Mafia 3D face mask',
+                      widthFactor: 0.62,
+                      heightFactor: 0.42,
+                      alignment: Alignment(0, -0.28),
+                      cameraOrbit: '0deg 75deg 2.2m',
+                      cameraTarget: '0m 0.9m 0m',
+                      fieldOfView: '26deg',
+                    )
+                  : null,
               onCreated: (c) async {
                 controller = c;
                 // ✅ start after first frame so ScaffoldMessenger definitely exists
@@ -189,8 +201,15 @@ class _TryOnScreenState extends State<TryOnScreen> {
                   child: const Text('Stop'),
                 ),
                 ElevatedButton(
-                  onPressed: () => controller?.setEffectAsset('assets/glasses_01.png'),
+                  onPressed: () =>
+                      controller?.setEffectAsset('assets/glasses_01.png'),
                   child: const Text('Effect'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() => _showGlbMask = !_showGlbMask);
+                  },
+                  child: Text(_showGlbMask ? 'Hide 3D Mask' : 'Show 3D Mask'),
                 ),
                 ElevatedButton(
                   onPressed: () => controller?.clearEffect(),

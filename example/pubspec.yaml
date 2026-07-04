@@ -1,5 +1,6 @@
 name: ar_tryon_view_example
 description: "Demonstrates how to use the ar_tryon_view plugin."
+publish_to: none
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 version: 1.0.0+1
@@ -60,6 +61,7 @@ flutter:
   #   - images/a_dot_ham.jpeg
   assets:
     - assets/glasses_01.png
+    - assets/mafia_mask.glb
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

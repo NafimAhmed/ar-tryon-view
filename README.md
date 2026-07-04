@@ -2,7 +2,7 @@
 
 # AR Try-On View (Flutter)
 
-A lightweight Flutter plugin that embeds a native Android camera preview using **PlatformView + CameraX** and supports **transparent PNG overlay effects** (e.g., glasses, masks, accessories). This is a great starting point for building **virtual try-on** experiences for e-commerce apps.
+A lightweight Flutter plugin that embeds a native camera preview using **PlatformView + CameraX/AVFoundation** and supports **transparent PNG overlay effects** plus **3D `.glb`/glTF mask overlays**. This is a great starting point for building **virtual try-on** experiences for e-commerce apps.
 
 ![Linear Date Picker Demo](https://media.giphy.com/media/iEhGnZhkzoSOF8JNyD/giphy.gif)
 
@@ -12,6 +12,7 @@ A lightweight Flutter plugin that embeds a native Android camera preview using *
 
 - Embedded native Android camera preview using PlatformView + CameraX.
 - Overlay transparent PNG effects on top of the camera feed.
+- Overlay 3D `.glb`/glTF masks above the camera preview using `ArTryOnGlbMask`.
 - Dart controller API: start/stop, setEffect, setEffectBytes, setEffectAsset, clearEffect.
 - Uses PreviewView ImplementationMode.COMPATIBLE for proper alpha blending (TextureView).
 - Works well with permission_handler for camera permission.
@@ -66,6 +67,7 @@ Add your assets in pubspec.yaml file
 flutter:
   assets:
     - assets/glasses_01.png
+    - assets/face_mask.glb
 
 
 
@@ -162,6 +164,44 @@ class _TryOnScreenState extends State<TryOnScreen> {
 
 
 ```
+
+### Use a 3D `.glb` face mask
+
+Add your `.glb` file to the app assets:
+
+```yaml
+flutter:
+  assets:
+    - assets/face_mask.glb
+```
+
+Then pass an `ArTryOnGlbMask` to `ArTryOnView`:
+
+```dart
+ArTryOnView(
+  glbMask: const ArTryOnGlbMask.asset(
+    'assets/face_mask.glb',
+    widthFactor: 0.62,
+    heightFactor: 0.42,
+    alignment: Alignment(0, -0.28),
+    cameraOrbit: '0deg 75deg 2.2m',
+    cameraTarget: '0m 0.9m 0m',
+    fieldOfView: '26deg',
+  ),
+  onCreated: (controller) async {
+    await controller.start();
+  },
+)
+```
+
+You can also use remote or local file sources:
+
+```dart
+ArTryOnGlbMask.url('https://example.com/masks/face_mask.glb');
+ArTryOnGlbMask.file('/absolute/path/to/face_mask.glb');
+```
+
+This renders the 3D model as an overlay above the camera preview. True face-anchored tracking still requires a native ARCore/ARKit face tracking implementation; this API prepares the plugin for `.glb` mask usage and lets you tune placement with `alignment`, `offset`, `widthFactor`, `heightFactor`, and model-viewer camera values.
 
 ## iOS Setup
 
