@@ -62,6 +62,8 @@ flutter:
   assets:
     - assets/glasses_01.png
     - assets/mafia_mask.glb
+    - assets/mafia_mask.gltf
+    - assets/bee.glb
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

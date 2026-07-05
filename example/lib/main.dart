@@ -167,7 +167,7 @@ class _TryOnScreenState extends State<TryOnScreen> {
             child: ArTryOnView(
               glbMask: _showGlbMask
                   ? const ArTryOnGlbMask.asset(
-                      'assets/mafia_mask.glb',
+                      'assets/bee.glb',
                       alt: 'Mafia 3D face mask',
                       widthFactor: 0.62,
                       heightFactor: 0.42,
