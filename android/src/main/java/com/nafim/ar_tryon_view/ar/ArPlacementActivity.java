@@ -559,8 +559,13 @@ public final class ArPlacementActivity extends Activity implements GLSurfaceView
                 ? "LOADING"
                 : (glbRenderer.isReady() ? "READY" : "ERROR");
 
+        String cameraDebug = state.toString();
+        if (state != TrackingState.TRACKING) {
+            cameraDebug += " (" + reason + ")";
+        }
+
         String text = message
-                + "\n\nCamera: " + state
+                + "\n\nCamera: " + cameraDebug
                 + "  Anchor: " + anchorState
                 + "  Model: " + modelState
                 + "  Planes: " + planeCount;
