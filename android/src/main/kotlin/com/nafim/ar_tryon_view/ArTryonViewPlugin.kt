@@ -3,8 +3,11 @@ package com.nafim.ar_tryon_view
 import android.Manifest
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
+import android.net.Uri
+import android.provider.OpenableColumns
 import android.util.Log
 import android.view.View
 import android.widget.FrameLayout
@@ -16,33 +19,217 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import com.nafim.ar_tryon_view.ar.ArPlacementActivity
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugin.common.PluginRegistry
 import io.flutter.plugin.common.StandardMessageCodec
 import io.flutter.plugin.platform.PlatformView
 import io.flutter.plugin.platform.PlatformViewFactory
 
-class ArTryonViewPlugin : FlutterPlugin, ActivityAware {
+class ArTryonViewPlugin :
+  FlutterPlugin,
+  ActivityAware,
+  PluginRegistry.ActivityResultListener,
+  MethodChannel.MethodCallHandler {
+
+  companion object {
+    private const val AR_CHANNEL = "ar_tryon_view/ar"
+    private const val PICK_GLB_REQUEST = 4011
+  }
 
   private var activity: Activity? = null
+  private var activityBinding: ActivityPluginBinding? = null
+  private var arChannel: MethodChannel? = null
+  private var pendingPickResult: MethodChannel.Result? = null
 
   override fun onAttachedToEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
     binding.platformViewRegistry.registerViewFactory(
       "ar_tryon_view/native_view",
       ArTryOnViewFactory(binding.binaryMessenger) { activity }
     )
+
+    arChannel = MethodChannel(binding.binaryMessenger, AR_CHANNEL).also {
+      it.setMethodCallHandler(this)
+    }
   }
 
-  override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {}
+  override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
+    arChannel?.setMethodCallHandler(null)
+    arChannel = null
+    pendingPickResult = null
+  }
 
-  override fun onAttachedToActivity(binding: ActivityPluginBinding) { activity = binding.activity }
-  override fun onDetachedFromActivityForConfigChanges() { activity = null }
-  override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) { activity = binding.activity }
-  override fun onDetachedFromActivity() { activity = null }
+  override fun onAttachedToActivity(binding: ActivityPluginBinding) {
+    activity = binding.activity
+    activityBinding = binding
+    binding.addActivityResultListener(this)
+  }
+
+  override fun onDetachedFromActivityForConfigChanges() {
+    detachActivity()
+  }
+
+  override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
+    onAttachedToActivity(binding)
+  }
+
+  override fun onDetachedFromActivity() {
+    detachActivity()
+  }
+
+  private fun detachActivity() {
+    activityBinding?.removeActivityResultListener(this)
+    activityBinding = null
+    activity = null
+  }
+
+  override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+    when (call.method) {
+      "pickGlb" -> pickGlb(result)
+      "openAr" -> openAr(call, result)
+      else -> result.notImplemented()
+    }
+  }
+
+  private fun pickGlb(result: MethodChannel.Result) {
+    val currentActivity = activity
+    if (currentActivity == null) {
+      result.error("NO_ACTIVITY", "Android Activity is not available.", null)
+      return
+    }
+
+    if (pendingPickResult != null) {
+      result.error("PICKER_BUSY", "A GLB picker is already open.", null)
+      return
+    }
+
+    pendingPickResult = result
+
+    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+      addCategory(Intent.CATEGORY_OPENABLE)
+      type = "*/*"
+      addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+      addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+    }
+
+    try {
+      currentActivity.startActivityForResult(intent, PICK_GLB_REQUEST)
+    } catch (e: Exception) {
+      pendingPickResult = null
+      result.error("PICKER_OPEN_FAILED", e.message, null)
+    }
+  }
+
+  override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
+    if (requestCode != PICK_GLB_REQUEST) return false
+
+    val result = pendingPickResult
+    pendingPickResult = null
+
+    if (result == null) return true
+
+    if (resultCode != Activity.RESULT_OK || data?.data == null) {
+      result.success(null)
+      return true
+    }
+
+    val currentActivity = activity
+    if (currentActivity == null) {
+      result.error("NO_ACTIVITY", "Android Activity is not available.", null)
+      return true
+    }
+
+    val uri = data.data!!
+    val metadata = readMetadata(currentActivity, uri)
+    val name = metadata.first
+
+    if (!name.lowercase().endsWith(".glb")) {
+      result.error(
+        "INVALID_FILE_TYPE",
+        "Only .glb 3D model files are supported.",
+        null
+      )
+      return true
+    }
+
+    try {
+      currentActivity.contentResolver.takePersistableUriPermission(
+        uri,
+        Intent.FLAG_GRANT_READ_URI_PERMISSION
+      )
+    } catch (_: SecurityException) {
+      // Some document providers grant only a temporary URI permission.
+    }
+
+    result.success(
+      mapOf(
+        "uri" to uri.toString(),
+        "name" to name,
+        "sizeBytes" to metadata.second
+      )
+    )
+    return true
+  }
+
+  private fun openAr(call: MethodCall, result: MethodChannel.Result) {
+    val currentActivity = activity
+    if (currentActivity == null) {
+      result.error("NO_ACTIVITY", "Android Activity is not available.", null)
+      return
+    }
+
+    val args = call.arguments as? Map<*, *>
+    val modelUri = args?.get("modelUri") as? String
+    val modelSizeM = (args?.get("modelSizeM") as? Number)?.toFloat() ?: 0.55f
+
+    if (modelUri.isNullOrBlank()) {
+      result.error("MODEL_REQUIRED", "Choose a .glb model first.", null)
+      return
+    }
+
+    try {
+      val intent = Intent(currentActivity, ArPlacementActivity::class.java).apply {
+        putExtra(ArPlacementActivity.EXTRA_MODEL_URI, modelUri)
+        putExtra(ArPlacementActivity.EXTRA_MODEL_SIZE_M, modelSizeM)
+      }
+      currentActivity.startActivity(intent)
+      result.success(true)
+    } catch (e: Exception) {
+      result.error("AR_OPEN_ERROR", e.message, null)
+    }
+  }
+
+  private fun readMetadata(activity: Activity, uri: Uri): Pair<String, Long> {
+    var name = "model.glb"
+    var size = -1L
+
+    activity.contentResolver.query(
+      uri,
+      arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+      null,
+      null,
+      null
+    )?.use { cursor ->
+      if (cursor.moveToFirst()) {
+        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+        val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+
+        if (nameIndex >= 0) {
+          cursor.getString(nameIndex)?.let { name = it }
+        }
+        if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) {
+          size = cursor.getLong(sizeIndex)
+        }
+      }
+    }
+
+    return name to size
+  }
 }
 
 private class ArTryOnViewFactory(
@@ -65,22 +252,18 @@ private class ArTryOnPlatformView(
   private val TAG = "ArTryOn"
 
   private val container = FrameLayout(context).apply {
-    // background black so you don't see flutter background
     setBackgroundColor(0xFF000000.toInt())
   }
 
-  // ✅ IMPORTANT FIX: Use COMPATIBLE to ensure TextureView (so overlay alpha works)
   private val previewView = PreviewView(context).apply {
     scaleType = PreviewView.ScaleType.FILL_CENTER
     implementationMode = PreviewView.ImplementationMode.COMPATIBLE
   }
 
-  // Overlay effect image (transparent PNG from Flutter bytes)
   private val effectView = ImageView(context).apply {
     visibility = View.GONE
     alpha = 1.0f
     scaleType = ImageView.ScaleType.FIT_CENTER
-    // keep transparent areas truly transparent
     setBackgroundColor(0x00000000)
   }
 
@@ -90,7 +273,6 @@ private class ArTryOnPlatformView(
   init {
     channel.setMethodCallHandler(this)
 
-    // 1) Camera preview
     container.addView(
       previewView,
       FrameLayout.LayoutParams(
@@ -99,7 +281,6 @@ private class ArTryOnPlatformView(
       )
     )
 
-    // 2) Effect overlay on top
     container.addView(
       effectView,
       FrameLayout.LayoutParams(
@@ -113,7 +294,10 @@ private class ArTryOnPlatformView(
 
   override fun dispose() {
     channel.setMethodCallHandler(null)
-    try { cameraProvider?.unbindAll() } catch (_: Exception) {}
+    try {
+      cameraProvider?.unbindAll()
+    } catch (_: Exception) {
+    }
     cameraProvider = null
   }
 
@@ -126,14 +310,8 @@ private class ArTryOnPlatformView(
         result.success(null)
       }
 
-      // String-based effect id (optional)
-      "setEffect" -> {
-        // val effectId = call.argument<String>("effectId") ?: ""
-        // You can map ids to assets later. For now just success.
-        result.success(null)
-      }
+      "setEffect" -> result.success(null)
 
-      // Bytes-based overlay (from Flutter)
       "setEffectBytes" -> {
         try {
           val bytes = call.arguments as ByteArray
@@ -181,7 +359,7 @@ private class ArTryOnPlatformView(
     }
 
     val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
-            PackageManager.PERMISSION_GRANTED
+      PackageManager.PERMISSION_GRANTED
     if (!granted) {
       result.error("NO_CAMERA_PERMISSION", "Camera permission not granted.", null)
       return
