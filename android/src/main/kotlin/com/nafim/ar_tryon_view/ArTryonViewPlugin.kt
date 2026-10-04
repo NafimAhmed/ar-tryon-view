@@ -192,6 +192,46 @@ class ArTryonViewPlugin :
       return
     }
 
+    // This plugin also owns a CameraX front-camera preview. ARCore needs
+    // exclusive access to the camera when the placement Activity starts.
+    // Explicitly unbind CameraX first; relying only on Activity lifecycle pause
+    // can leave ARCore stuck in Camera: PAUSED on some devices.
+    try {
+      val providerFuture = ProcessCameraProvider.getInstance(currentActivity)
+      providerFuture.addListener({
+        try {
+          providerFuture.get().unbindAll()
+        } catch (cameraReleaseError: Exception) {
+          Log.w("ArTryOn", "Could not explicitly release CameraX before AR", cameraReleaseError)
+        }
+
+        // Give CameraX a short moment to release the camera device before ARCore
+        // opens the rear camera.
+        currentActivity.window.decorView.postDelayed({
+          launchArActivity(
+            currentActivity = currentActivity,
+            modelUri = modelUri,
+            modelSizeM = modelSizeM,
+            result = result
+          )
+        }, 300L)
+      }, ContextCompat.getMainExecutor(currentActivity))
+    } catch (e: Exception) {
+      launchArActivity(
+        currentActivity = currentActivity,
+        modelUri = modelUri,
+        modelSizeM = modelSizeM,
+        result = result
+      )
+    }
+  }
+
+  private fun launchArActivity(
+    currentActivity: Activity,
+    modelUri: String,
+    modelSizeM: Float,
+    result: MethodChannel.Result
+  ) {
     try {
       val intent = Intent(currentActivity, ArPlacementActivity::class.java).apply {
         putExtra(ArPlacementActivity.EXTRA_MODEL_URI, modelUri)
