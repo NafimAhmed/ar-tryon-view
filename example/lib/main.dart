@@ -150,6 +150,24 @@ class _TryOnScreenState extends State<TryOnScreen> {
     }
   }
 
+
+  Future<void> _placeGlbInAr() async {
+    try {
+      final file = await ArGlbPlacement.pickGlb();
+      if (file == null) return;
+
+      await ArGlbPlacement.open(
+        modelUri: file.uri,
+        modelSizeM: 0.55,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('AR placement failed: $e')),
+      );
+    }
+  }
+
   @override
   void dispose() {
     // optional safety
@@ -210,6 +228,10 @@ class _TryOnScreenState extends State<TryOnScreen> {
                     setState(() => _showGlbMask = !_showGlbMask);
                   },
                   child: Text(_showGlbMask ? 'Hide 3D Mask' : 'Show 3D Mask'),
+                ),
+                ElevatedButton(
+                  onPressed: _placeGlbInAr,
+                  child: const Text('Place GLB in AR'),
                 ),
                 ElevatedButton(
                   onPressed: () => controller?.clearEffect(),
