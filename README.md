@@ -213,3 +213,44 @@ Open: `ios/Runner/Info.plist` and add inside `<dict> ... </dict>`:
 <key>NSCameraUsageDescription</key>
 <string>This app needs camera access for AR try-on preview.</string>
 
+
+
+## Native ARCore GLB floor placement (Android)
+
+The package now also includes a separate native ARCore flow for placing a user-selected
+`.glb` model on the floor. This does not replace the existing CameraX/AVFoundation
+try-on view.
+
+```dart
+import 'package:ar_tryon_view/ar_tryon_view.dart';
+
+final file = await ArGlbPlacement.pickGlb();
+
+if (file != null) {
+  await ArGlbPlacement.open(
+    modelUri: file.uri,
+    modelSizeM: 0.55,
+  );
+}
+```
+
+Or use the convenience API:
+
+```dart
+await ArGlbPlacement.pickAndOpen(modelSizeM: 0.55);
+```
+
+Android behavior:
+
+- Native Android document picker; only `.glb` files are accepted.
+- ARCore horizontal-plane detection.
+- Instant Placement fallback while plane discovery is warming up.
+- Center reticle turns green when placement is available.
+- Tap once to create an ARCore anchor and place the model.
+- Reposition button detaches the current anchor and lets the user place again.
+- Supports GLB unsigned byte/short indices and 32-bit indices when the device exposes
+  `GL_OES_element_index_uint`.
+- Existing front-camera PNG/3D overlay try-on APIs remain unchanged.
+
+The native AR placement feature is Android-only for now. ARCore is declared optional so
+apps using only the existing try-on camera view are not unnecessarily restricted.
