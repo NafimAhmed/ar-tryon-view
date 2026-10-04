@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:model_viewer_plus/model_viewer_plus.dart';
 
+export 'ar_glb_placement.dart';
+
 class ArTryOnGlbMask {
   const ArTryOnGlbMask({
     required this.src,
