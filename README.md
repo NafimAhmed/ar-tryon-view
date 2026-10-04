@@ -28,7 +28,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  ar_tryon_view: ^0.0.5
+  ar_tryon_view: ^0.0.6
 
 
 ```
