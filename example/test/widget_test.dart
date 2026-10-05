@@ -1,20 +1,13 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
+import 'package:ar_tryon_view_example/main.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:ar_tryon_view_example/main.dart';
-
 void main() {
-  testWidgets('Verify Platform version', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
+  testWidgets('shows the two supported feature controls', (tester) async {
     await tester.pumpWidget(const MyApp());
 
-    expect(find.text('AR Try-on Demo'), findsOneWidget);
-    expect(find.text('Show 3D Mask'), findsOneWidget);
+    expect(find.text('1. PNG face overlay'), findsOneWidget);
+    expect(find.text('2. GLB floor placement'), findsOneWidget);
+    expect(find.text('Show PNG'), findsOneWidget);
+    expect(find.text('Choose .glb and place in AR'), findsOneWidget);
   });
 }
