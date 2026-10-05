@@ -350,7 +350,6 @@ private class ArTryOnPlatformView(
         result.success(null)
       }
 
-      "setEffect" -> result.success(null)
 
       "setEffectBytes" -> {
         try {
