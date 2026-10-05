@@ -32,7 +32,9 @@ import java.util.List;
  * - optional TEXCOORD_0
  * - unsigned byte/short/int GLB indices, including 32-bit indices when the device supports them
  * - node matrix / TRS transforms
- * - optional embedded baseColorTexture
+ * - per-material baseColorFactor and embedded baseColorTexture
+ * - multiple primitives/materials per glTF mesh
+ * - EXT_texture_webp base-color sources used by Khronos furniture samples
  */
 public final class GlbRenderer {
     private static final String TAG = "GLB_RENDERER";
@@ -55,7 +57,14 @@ public final class GlbRenderer {
         float[] max;
     }
 
+    private static final class MaterialData {
+        int textureId;
+        final float[] baseColorFactor = {1f, 1f, 1f, 1f};
+    }
+
     private static final class MeshData {
+        int sourceMeshIndex;
+        int materialIndex;
         int positionBuffer;
         int uvBuffer;
         int indexBuffer;
@@ -71,6 +80,7 @@ public final class GlbRenderer {
 
     private final List<MeshData> meshes = new ArrayList<>();
     private final List<InstanceData> instances = new ArrayList<>();
+    private final List<MaterialData> materials = new ArrayList<>();
 
     private JSONObject json;
     private byte[] bin;
@@ -82,7 +92,8 @@ public final class GlbRenderer {
     private int aUv;
     private int uMvp;
     private int uTexture;
-    private int texture;
+    private int uBaseColorFactor;
+    private int defaultWhiteTexture;
 
     private boolean ready;
     private String error;
@@ -107,7 +118,7 @@ public final class GlbRenderer {
             parse(glb);
 
             createProgram();
-            createTexture();
+            createMaterials();
             createMeshes();
             createInstances();
             createNormalization(sizeMeters);
@@ -142,48 +153,53 @@ public final class GlbRenderer {
 
         GLES20.glUseProgram(program);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture);
         GLES20.glUniform1i(uTexture, 0);
         GLES20.glDisable(GLES20.GL_CULL_FACE);
         GLES20.glEnable(GLES20.GL_DEPTH_TEST);
 
         for (InstanceData instance : instances) {
-            if (instance.meshIndex < 0 || instance.meshIndex >= meshes.size()) continue;
-
-            MeshData mesh = meshes.get(instance.meshIndex);
-
             Matrix.multiplyMM(modelMatrix, 0, temp, 0, instance.matrix, 0);
             Matrix.multiplyMM(mv, 0, view, 0, modelMatrix, 0);
             Matrix.multiplyMM(mvp, 0, projection, 0, mv, 0);
-
             GLES20.glUniformMatrix4fv(uMvp, 1, false, mvp, 0);
 
-            GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, mesh.positionBuffer);
-            GLES20.glEnableVertexAttribArray(aPosition);
-            GLES20.glVertexAttribPointer(
-                    aPosition,
-                    3,
-                    GLES20.GL_FLOAT,
-                    false,
-                    12,
-                    0);
+            // A glTF mesh can contain more than one primitive/material.
+            for (MeshData mesh : meshes) {
+                if (mesh.sourceMeshIndex != instance.meshIndex) continue;
 
-            GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, mesh.uvBuffer);
-            GLES20.glEnableVertexAttribArray(aUv);
-            GLES20.glVertexAttribPointer(
-                    aUv,
-                    2,
-                    GLES20.GL_FLOAT,
-                    false,
-                    8,
-                    0);
+                MaterialData material = getMaterial(mesh.materialIndex);
+                GLES20.glBindTexture(
+                        GLES20.GL_TEXTURE_2D,
+                        material.textureId != 0 ? material.textureId : defaultWhiteTexture);
+                GLES20.glUniform4fv(uBaseColorFactor, 1, material.baseColorFactor, 0);
 
-            GLES20.glBindBuffer(GLES20.GL_ELEMENT_ARRAY_BUFFER, mesh.indexBuffer);
-            GLES20.glDrawElements(
-                    GLES20.GL_TRIANGLES,
-                    mesh.indexCount,
-                    mesh.indexType,
-                    0);
+                GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, mesh.positionBuffer);
+                GLES20.glEnableVertexAttribArray(aPosition);
+                GLES20.glVertexAttribPointer(
+                        aPosition,
+                        3,
+                        GLES20.GL_FLOAT,
+                        false,
+                        12,
+                        0);
+
+                GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, mesh.uvBuffer);
+                GLES20.glEnableVertexAttribArray(aUv);
+                GLES20.glVertexAttribPointer(
+                        aUv,
+                        2,
+                        GLES20.GL_FLOAT,
+                        false,
+                        8,
+                        0);
+
+                GLES20.glBindBuffer(GLES20.GL_ELEMENT_ARRAY_BUFFER, mesh.indexBuffer);
+                GLES20.glDrawElements(
+                        GLES20.GL_TRIANGLES,
+                        mesh.indexCount,
+                        mesh.indexType,
+                        0);
+            }
         }
 
         GLES20.glDisableVertexAttribArray(aPosition);
@@ -292,9 +308,10 @@ public final class GlbRenderer {
         String fragmentShader =
                 "precision mediump float;"
                         + "uniform sampler2D u_Texture;"
+                        + "uniform vec4 u_BaseColorFactor;"
                         + "varying vec2 v_Uv;"
                         + "void main(){"
-                        + "gl_FragColor=texture2D(u_Texture,v_Uv);"
+                        + "gl_FragColor=texture2D(u_Texture,v_Uv)*u_BaseColorFactor;"
                         + "}";
 
         program = GlUtil.createProgram(vertexShader, fragmentShader);
@@ -302,45 +319,96 @@ public final class GlbRenderer {
         aUv = GLES20.glGetAttribLocation(program, "a_TexCoord");
         uMvp = GLES20.glGetUniformLocation(program, "u_MVP");
         uTexture = GLES20.glGetUniformLocation(program, "u_Texture");
+        uBaseColorFactor = GLES20.glGetUniformLocation(program, "u_BaseColorFactor");
     }
 
-    private void createTexture() {
+    private void createMaterials() {
+        materials.clear();
+        defaultWhiteTexture = createSolidTexture(255, 255, 255, 255);
+
+        JSONArray materialArray = json.optJSONArray("materials");
+        if (materialArray == null || materialArray.length() == 0) {
+            MaterialData material = new MaterialData();
+            material.textureId = defaultWhiteTexture;
+            materials.add(material);
+            return;
+        }
+
+        for (int i = 0; i < materialArray.length(); i++) {
+            MaterialData material = new MaterialData();
+            material.textureId = defaultWhiteTexture;
+
+            try {
+                JSONObject pbr = materialArray
+                        .getJSONObject(i)
+                        .optJSONObject("pbrMetallicRoughness");
+
+                if (pbr != null) {
+                    JSONArray factor = pbr.optJSONArray("baseColorFactor");
+                    if (factor != null && factor.length() >= 4) {
+                        for (int c = 0; c < 4; c++) {
+                            material.baseColorFactor[c] = (float) factor.getDouble(c);
+                        }
+                    }
+
+                    JSONObject baseColorTexture = pbr.optJSONObject("baseColorTexture");
+                    if (baseColorTexture != null) {
+                        int textureIndex = baseColorTexture.getInt("index");
+                        int loadedTexture = loadTexture(textureIndex);
+                        if (loadedTexture != 0) {
+                            material.textureId = loadedTexture;
+                        }
+                    }
+                }
+            } catch (Throwable materialError) {
+                Log.w(TAG, "Material " + i + " fallback", materialError);
+            }
+
+            materials.add(material);
+        }
+    }
+
+    private MaterialData getMaterial(int index) {
+        if (index >= 0 && index < materials.size()) {
+            return materials.get(index);
+        }
+
+        MaterialData fallback = new MaterialData();
+        fallback.textureId = defaultWhiteTexture;
+        return fallback;
+    }
+
+    private int loadTexture(int textureIndex) {
         try {
-            if (!json.has("materials") || !json.has("textures") || !json.has("images")) {
-                createSolidTexture();
-                return;
+            JSONArray textures = json.optJSONArray("textures");
+            JSONArray images = json.optJSONArray("images");
+            if (textures == null || images == null
+                    || textureIndex < 0 || textureIndex >= textures.length()) {
+                return 0;
             }
 
-            JSONArray materials = json.getJSONArray("materials");
-            if (materials.length() == 0) {
-                createSolidTexture();
-                return;
+            JSONObject textureObject = textures.getJSONObject(textureIndex);
+            int source = textureObject.optInt("source", -1);
+
+            // Khronos furniture samples often store WebP source through
+            // EXT_texture_webp instead of the core "source" property.
+            if (source < 0) {
+                JSONObject extensions = textureObject.optJSONObject("extensions");
+                if (extensions != null) {
+                    JSONObject webp = extensions.optJSONObject("EXT_texture_webp");
+                    if (webp != null) {
+                        source = webp.optInt("source", -1);
+                    }
+                }
             }
 
-            JSONObject pbr = materials
-                    .getJSONObject(0)
-                    .optJSONObject("pbrMetallicRoughness");
+            if (source < 0 || source >= images.length()) return 0;
 
-            if (pbr == null || !pbr.has("baseColorTexture")) {
-                createSolidTexture();
-                return;
-            }
-
-            int textureIndex = pbr
-                    .getJSONObject("baseColorTexture")
-                    .getInt("index");
-            int source = json
-                    .getJSONArray("textures")
-                    .getJSONObject(textureIndex)
-                    .getInt("source");
-
-            JSONObject imageObject = json
-                    .getJSONArray("images")
-                    .getJSONObject(source);
-
+            JSONObject imageObject = images.getJSONObject(source);
             if (!imageObject.has("bufferView")) {
-                createSolidTexture();
-                return;
+                // The AR picker accepts a single GLB file, so external image URIs
+                // cannot be resolved reliably here. Fall back to baseColorFactor.
+                return 0;
             }
 
             int bufferViewIndex = imageObject.getInt("bufferView");
@@ -354,38 +422,38 @@ public final class GlbRenderer {
                     imageBytes,
                     0,
                     imageBytes.length);
-
-            if (bitmap == null) {
-                createSolidTexture();
-                return;
-            }
+            if (bitmap == null) return 0;
 
             int[] id = new int[1];
             GLES20.glGenTextures(1, id, 0);
-            texture = id[0];
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture);
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, id[0]);
             setTextureParams();
             GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0);
-            GLES20.glGenerateMipmap(GLES20.GL_TEXTURE_2D);
+
+            // Only generate mipmaps for power-of-two images in ES2.
+            if (isPowerOfTwo(bitmap.getWidth()) && isPowerOfTwo(bitmap.getHeight())) {
+                GLES20.glGenerateMipmap(GLES20.GL_TEXTURE_2D);
+            }
+
             bitmap.recycle();
+            return id[0];
         } catch (Throwable textureError) {
-            Log.w(TAG, "Texture unavailable; using solid fallback", textureError);
-            createSolidTexture();
+            Log.w(TAG, "Base color texture unavailable; using material color", textureError);
+            return 0;
         }
     }
 
-    private void createSolidTexture() {
+    private int createSolidTexture(int r, int g, int b, int a) {
         int[] id = new int[1];
         GLES20.glGenTextures(1, id, 0);
-        texture = id[0];
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, id[0]);
         setTextureParams();
 
         ByteBuffer pixel = ByteBuffer.allocateDirect(4);
-        pixel.put((byte) 80);
-        pixel.put((byte) 80);
-        pixel.put((byte) 80);
-        pixel.put((byte) 255);
+        pixel.put((byte) r);
+        pixel.put((byte) g);
+        pixel.put((byte) b);
+        pixel.put((byte) a);
         pixel.position(0);
 
         GLES20.glTexImage2D(
@@ -398,6 +466,11 @@ public final class GlbRenderer {
                 GLES20.GL_RGBA,
                 GLES20.GL_UNSIGNED_BYTE,
                 pixel);
+        return id[0];
+    }
+
+    private static boolean isPowerOfTwo(int value) {
+        return value > 0 && (value & (value - 1)) == 0;
     }
 
     private void setTextureParams() {
@@ -422,72 +495,76 @@ public final class GlbRenderer {
     private void createMeshes() throws Exception {
         JSONArray meshArray = json.getJSONArray("meshes");
 
-        for (int i = 0; i < meshArray.length(); i++) {
+        for (int meshIndex = 0; meshIndex < meshArray.length(); meshIndex++) {
             JSONArray primitives = meshArray
-                    .getJSONObject(i)
+                    .getJSONObject(meshIndex)
                     .getJSONArray("primitives");
 
-            if (primitives.length() == 0) continue;
+            for (int primitiveIndex = 0; primitiveIndex < primitives.length(); primitiveIndex++) {
+                JSONObject primitive = primitives.getJSONObject(primitiveIndex);
+                JSONObject attributes = primitive.getJSONObject("attributes");
 
-            JSONObject primitive = primitives.getJSONObject(0);
-            JSONObject attributes = primitive.getJSONObject("attributes");
+                if (!primitive.has("indices") || !attributes.has("POSITION")) continue;
 
-            int positionAccessor = attributes.getInt("POSITION");
-            int indexAccessor = primitive.getInt("indices");
+                int positionAccessor = attributes.getInt("POSITION");
+                int indexAccessor = primitive.getInt("indices");
 
-            FloatBuffer positions = floatAccessor(positionAccessor, 3);
-            int vertexCount = accessors[positionAccessor].count;
+                FloatBuffer positions = floatAccessor(positionAccessor, 3);
+                int vertexCount = accessors[positionAccessor].count;
 
-            FloatBuffer uvs;
-            if (attributes.has("TEXCOORD_0")) {
-                uvs = floatAccessor(attributes.getInt("TEXCOORD_0"), 2);
-            } else {
-                uvs = ByteBuffer
-                        .allocateDirect(vertexCount * 2 * 4)
-                        .order(ByteOrder.nativeOrder())
-                        .asFloatBuffer();
-                for (int v = 0; v < vertexCount; v++) {
-                    uvs.put(0.5f);
-                    uvs.put(0.5f);
+                FloatBuffer uvs;
+                if (attributes.has("TEXCOORD_0")) {
+                    uvs = floatAccessor(attributes.getInt("TEXCOORD_0"), 2);
+                } else {
+                    uvs = ByteBuffer
+                            .allocateDirect(vertexCount * 2 * 4)
+                            .order(ByteOrder.nativeOrder())
+                            .asFloatBuffer();
+                    for (int v = 0; v < vertexCount; v++) {
+                        uvs.put(0.5f);
+                        uvs.put(0.5f);
+                    }
+                    uvs.position(0);
                 }
-                uvs.position(0);
+
+                IndexData indices = indexAccessorData(indexAccessor);
+
+                int[] ids = new int[3];
+                GLES20.glGenBuffers(3, ids, 0);
+
+                MeshData mesh = new MeshData();
+                mesh.sourceMeshIndex = meshIndex;
+                mesh.materialIndex = primitive.optInt("material", -1);
+                mesh.positionBuffer = ids[0];
+                mesh.uvBuffer = ids[1];
+                mesh.indexBuffer = ids[2];
+                mesh.indexCount = accessors[indexAccessor].count;
+                mesh.indexType = indices.glType;
+                mesh.positionAccessor = positionAccessor;
+
+                GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, mesh.positionBuffer);
+                GLES20.glBufferData(
+                        GLES20.GL_ARRAY_BUFFER,
+                        positions.remaining() * 4,
+                        positions,
+                        GLES20.GL_STATIC_DRAW);
+
+                GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, mesh.uvBuffer);
+                GLES20.glBufferData(
+                        GLES20.GL_ARRAY_BUFFER,
+                        uvs.remaining() * 4,
+                        uvs,
+                        GLES20.GL_STATIC_DRAW);
+
+                GLES20.glBindBuffer(GLES20.GL_ELEMENT_ARRAY_BUFFER, mesh.indexBuffer);
+                GLES20.glBufferData(
+                        GLES20.GL_ELEMENT_ARRAY_BUFFER,
+                        indices.buffer.remaining(),
+                        indices.buffer,
+                        GLES20.GL_STATIC_DRAW);
+
+                meshes.add(mesh);
             }
-
-            IndexData indices = indexAccessorData(indexAccessor);
-
-            int[] ids = new int[3];
-            GLES20.glGenBuffers(3, ids, 0);
-
-            MeshData mesh = new MeshData();
-            mesh.positionBuffer = ids[0];
-            mesh.uvBuffer = ids[1];
-            mesh.indexBuffer = ids[2];
-            mesh.indexCount = accessors[indexAccessor].count;
-            mesh.indexType = indices.glType;
-            mesh.positionAccessor = positionAccessor;
-
-            GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, mesh.positionBuffer);
-            GLES20.glBufferData(
-                    GLES20.GL_ARRAY_BUFFER,
-                    positions.remaining() * 4,
-                    positions,
-                    GLES20.GL_STATIC_DRAW);
-
-            GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, mesh.uvBuffer);
-            GLES20.glBufferData(
-                    GLES20.GL_ARRAY_BUFFER,
-                    uvs.remaining() * 4,
-                    uvs,
-                    GLES20.GL_STATIC_DRAW);
-
-            GLES20.glBindBuffer(GLES20.GL_ELEMENT_ARRAY_BUFFER, mesh.indexBuffer);
-            GLES20.glBufferData(
-                    GLES20.GL_ELEMENT_ARRAY_BUFFER,
-                    indices.buffer.remaining(),
-                    indices.buffer,
-                    GLES20.GL_STATIC_DRAW);
-
-            meshes.add(mesh);
         }
 
         GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, 0);
@@ -624,22 +701,23 @@ public final class GlbRenderer {
         float maxZ = Float.NEGATIVE_INFINITY;
 
         for (InstanceData instance : instances) {
-            if (instance.meshIndex < 0 || instance.meshIndex >= meshes.size()) continue;
+            for (MeshData mesh : meshes) {
+                if (mesh.sourceMeshIndex != instance.meshIndex) continue;
 
-            MeshData mesh = meshes.get(instance.meshIndex);
-            Accessor accessor = accessors[mesh.positionAccessor];
-            if (accessor.min == null || accessor.max == null) continue;
+                Accessor accessor = accessors[mesh.positionAccessor];
+                if (accessor.min == null || accessor.max == null) continue;
 
-            for (float x : new float[]{accessor.min[0], accessor.max[0]}) {
-                for (float y : new float[]{accessor.min[1], accessor.max[1]}) {
-                    for (float z : new float[]{accessor.min[2], accessor.max[2]}) {
-                        float[] point = point(instance.matrix, x, y, z);
-                        minX = Math.min(minX, point[0]);
-                        minY = Math.min(minY, point[1]);
-                        minZ = Math.min(minZ, point[2]);
-                        maxX = Math.max(maxX, point[0]);
-                        maxY = Math.max(maxY, point[1]);
-                        maxZ = Math.max(maxZ, point[2]);
+                for (float x : new float[]{accessor.min[0], accessor.max[0]}) {
+                    for (float y : new float[]{accessor.min[1], accessor.max[1]}) {
+                        for (float z : new float[]{accessor.min[2], accessor.max[2]}) {
+                            float[] point = point(instance.matrix, x, y, z);
+                            minX = Math.min(minX, point[0]);
+                            minY = Math.min(minY, point[1]);
+                            minZ = Math.min(minZ, point[2]);
+                            maxX = Math.max(maxX, point[0]);
+                            maxY = Math.max(maxY, point[1]);
+                            maxZ = Math.max(maxZ, point[2]);
+                        }
                     }
                 }
             }
