@@ -1,16 +1,15 @@
-# ar_tryon_view_example
+# ar_tryon_view example
 
-Demonstrates how to use the ar_tryon_view plugin.
+This example intentionally demonstrates only the package's two supported features:
 
-## Getting Started
+1. Transparent PNG overlay on the native front-camera preview.
+2. Android native ARCore placement of a user-selected `.glb` model.
 
-This project is a starting point for a Flutter application.
+Run:
 
-A few resources to get you started if this is your first Flutter project:
+```bash
+flutter pub get
+flutter run
+```
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+The example keeps only `assets/glasses_01.png` as a bundled demo asset. GLB models are selected at runtime from the Android document picker.
