@@ -4,23 +4,8 @@ import AVFoundation
 
 public class ArTryonViewPlugin: NSObject, FlutterPlugin {
   public static func register(with registrar: FlutterPluginRegistrar) {
-    // ✅ Keep your old channel (optional)
-    let channel = FlutterMethodChannel(name: "ar_tryon_view", binaryMessenger: registrar.messenger())
-    let instance = ArTryonViewPlugin()
-    registrar.addMethodCallDelegate(instance, channel: channel)
-
-    // ✅ Register PlatformView (this is what you need for camera+overlay view)
     let factory = ArTryOnViewFactory(messenger: registrar.messenger())
     registrar.register(factory, withId: "ar_tryon_view/native_view")
-  }
-
-  public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-    switch call.method {
-    case "getPlatformVersion":
-      result("iOS " + UIDevice.current.systemVersion)
-    default:
-      result(FlutterMethodNotImplemented)
-    }
   }
 }
 
