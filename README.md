@@ -1,229 +1,104 @@
+# AR Try-On View
 
+A Flutter plugin with exactly two user-facing features:
 
-# AR Try-On View (Flutter)
+1. **PNG face/camera overlay** using the native front camera.
+2. **Native Android ARCore GLB placement** for placing a user-selected `.glb` model on a floor/surface.
 
-A lightweight Flutter plugin that embeds a native camera preview using **PlatformView + CameraX/AVFoundation** and supports **transparent PNG overlay effects** plus **3D `.glb`/glTF mask overlays**. This is a great starting point for building **virtual try-on** experiences for e-commerce apps.
+The old ModelViewer-based 3D mask overlay has been removed.
 
-![Linear Date Picker Demo](https://media.giphy.com/media/iEhGnZhkzoSOF8JNyD/giphy.gif)
+## Platform support
 
-![Linear Date Picker Demo](https://media.giphy.com/media/h6A88MsuZWu7mTN8Zy/giphy.gif)
-
-## Features
-
-- Embedded native Android camera preview using PlatformView + CameraX.
-- Overlay transparent PNG effects on top of the camera feed.
-- Overlay 3D `.glb`/glTF masks above the camera preview using `ArTryOnGlbMask`.
-- Dart controller API: start/stop, setEffect, setEffectBytes, setEffectAsset, clearEffect.
-- Uses PreviewView ImplementationMode.COMPATIBLE for proper alpha blending (TextureView).
-- Works well with permission_handler for camera permission.
-
-## Platform Support
-
-- Android: ✅ Supported
-- iOS: ✅ Supported (AVFoundation camera preview + PNG overlay)
+| Feature | Android | iOS |
+| --- | --- | --- |
+| PNG camera overlay | ✅ | ✅ |
+| Native GLB AR placement | ✅ | ❌ |
 
 ## Installation
 
-Add to your `pubspec.yaml`:
+```yaml
+dependencies:
+  ar_tryon_view: ^0.0.7
+```
+
+For testing the development branch directly:
 
 ```yaml
 dependencies:
-  ar_tryon_view: ^0.0.6
-
-
-```
-## Usage
-
-Take permission from AndroidManifest.xml file
-
-```xml
-<uses-permission android:name="android.permission.CAMERA" />
-
+  ar_tryon_view:
+    git:
+      url: https://github.com/NafimAhmed/ar-tryon-view.git
+      ref: native-ar-glb-placement
 ```
 
-Make sure the /android/app/build.gradle.kts file contain this
+Android apps should use at least:
 
 ```kotlin
-
 android {
-    // Recommended to avoid NDK mismatch with some plugins
-    ndkVersion = "27.0.12077973"
-
     defaultConfig {
-        // Required for this plugin (CameraX / platform view pipeline)
         minSdk = 24
     }
 }
-
-
 ```
 
+Add camera permission to the host Android app:
 
-Add your assets in pubspec.yaml file 
-
-```yaml
-
-
-flutter:
-  assets:
-    - assets/glasses_01.png
-    - assets/face_mask.glb
-
-
-
+```xml
+<uses-permission android:name="android.permission.CAMERA" />
 ```
 
-
-Set .png assets here
-
-
-```dart
-
-@override
-Widget build(BuildContext context) {
-  return Scaffold(
-    body: ElevatedButton(
-      onPressed: () => controller?.setEffectAsset('assets/glasses_01.png'),
-      child: const Text('Effect'),
-    ),
-  );
-}
-
-
-
-```
-
-Just like this: 
-
-```dart
-
-import 'package:flutter/material.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:ar_tryon_view/ar_tryon_view.dart';
-
-class TryOnScreen extends StatefulWidget {
-  const TryOnScreen({super.key});
-
-  @override
-  State<TryOnScreen> createState() => _TryOnScreenState();
-}
-
-class _TryOnScreenState extends State<TryOnScreen> {
-  ArTryOnController? controller;
-
-  Future<void> _startSafely() async {
-    final status = await Permission.camera.request();
-    if (!status.isGranted) return;
-    await controller?.start();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('AR Try-on Demo')),
-      body: Column(
-        children: [
-          Expanded(
-            child: ArTryOnView(
-              onCreated: (c) async {
-                controller = c;
-                await _startSafely();
-              },
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Wrap(
-              spacing: 10,
-              children: [
-                ElevatedButton(
-                  onPressed: _startSafely,
-                  child: const Text('Start'),
-                ),
-                ElevatedButton(
-                  onPressed: () => controller?.stop(),
-                  child: const Text('Stop'),
-                ),
-                ElevatedButton(
-                  onPressed: () => controller?.setEffectAsset('assets/glasses_01.png'),
-                  child: const Text('Effect'),
-                ),
-                ElevatedButton(
-                  onPressed: () => controller?.clearEffect(),
-                  child: const Text('Clear'),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-
-
-```
-
-### Use a 3D `.glb` face mask
-
-Add your `.glb` file to the app assets:
-
-```yaml
-flutter:
-  assets:
-    - assets/face_mask.glb
-```
-
-Then pass an `ArTryOnGlbMask` to `ArTryOnView`:
-
-```dart
-ArTryOnView(
-  glbMask: const ArTryOnGlbMask.asset(
-    'assets/face_mask.glb',
-    widthFactor: 0.62,
-    heightFactor: 0.42,
-    alignment: Alignment(0, -0.28),
-    cameraOrbit: '0deg 75deg 2.2m',
-    cameraTarget: '0m 0.9m 0m',
-    fieldOfView: '26deg',
-  ),
-  onCreated: (controller) async {
-    await controller.start();
-  },
-)
-```
-
-You can also use remote or local file sources:
-
-```dart
-ArTryOnGlbMask.url('https://example.com/masks/face_mask.glb');
-ArTryOnGlbMask.file('/absolute/path/to/face_mask.glb');
-```
-
-This renders the 3D model as an overlay above the camera preview. True face-anchored tracking still requires a native ARCore/ARKit face tracking implementation; this API prepares the plugin for `.glb` mask usage and lets you tune placement with `alignment`, `offset`, `widthFactor`, `heightFactor`, and model-viewer camera values.
-
-## iOS Setup
-
-### 1) Add Camera Permission to Info.plist
-
-Open: `ios/Runner/Info.plist` and add inside `<dict> ... </dict>`:
+For iOS, add:
 
 ```xml
 <key>NSCameraUsageDescription</key>
-<string>This app needs camera access for AR try-on preview.</string>
+<string>This app needs camera access for the try-on preview.</string>
+```
 
+## 1. PNG face/camera overlay
 
+Add a transparent PNG asset:
 
-## Native ARCore GLB floor placement (Android)
+```yaml
+flutter:
+  assets:
+    - assets/glasses_01.png
+```
 
-The package now also includes a separate native ARCore flow for placing a user-selected
-`.glb` model on the floor. This does not replace the existing CameraX/AVFoundation
-try-on view.
+Then use:
 
 ```dart
 import 'package:ar_tryon_view/ar_tryon_view.dart';
 
+ArTryOnController? controller;
+
+ArTryOnView(
+  onCreated: (c) async {
+    controller = c;
+    await controller!.start();
+    await controller!.setEffectAsset('assets/glasses_01.png');
+  },
+);
+```
+
+Available PNG overlay controls:
+
+```dart
+await controller?.setEffectAsset('assets/glasses_01.png');
+await controller?.setEffectBytes(bytes);
+await controller?.clearEffect();
+await controller?.start();
+await controller?.stop();
+```
+
+This feature is a native front-camera preview with a transparent image overlay. It does not add a second 3D mask system.
+
+## 2. Native GLB AR placement
+
+Android only.
+
+Pick a `.glb` file and open the native ARCore placement screen:
+
+```dart
 final file = await ArGlbPlacement.pickGlb();
 
 if (file != null) {
@@ -234,23 +109,53 @@ if (file != null) {
 }
 ```
 
-Or use the convenience API:
+Or:
 
 ```dart
-await ArGlbPlacement.pickAndOpen(modelSizeM: 0.55);
+await ArGlbPlacement.pickAndOpen(
+  modelSizeM: 0.55,
+);
 ```
 
-Android behavior:
+The AR placement flow:
 
-- Native Android document picker; only `.glb` files are accepted.
-- ARCore horizontal-plane detection.
-- Instant Placement fallback while plane discovery is warming up.
-- Center reticle turns green when placement is available.
-- Tap once to create an ARCore anchor and place the model.
-- Reposition button detaches the current anchor and lets the user place again.
-- Supports GLB unsigned byte/short indices and 32-bit indices when the device exposes
-  `GL_OES_element_index_uint`.
-- Existing front-camera PNG/3D overlay try-on APIs remain unchanged.
+```text
+Choose .glb
+   ↓
+Native ARCore camera
+   ↓
+Real horizontal plane preferred
+   ↓
+Instant Placement fallback
+   ↓
++ turns GREEN
+   ↓
+Tap once
+   ↓
+ARCore anchor + GLB model
+```
 
-The native AR placement feature is Android-only for now. ARCore is declared optional so
-apps using only the existing try-on camera view are not unnecessarily restricted.
+Current GLB renderer support includes:
+
+- `.glb` only
+- embedded base-color textures
+- per-material `baseColorFactor`
+- multiple materials
+- multiple mesh primitives
+- `EXT_texture_webp` base-color sources
+- unsigned byte/short indices
+- 32-bit indices on supported devices
+- ARCore horizontal-plane detection
+- Instant Placement fallback
+- repositioning after placement
+
+Advanced PBR effects such as full sheen, specular, clearcoat, transmission, and normal-map lighting are not fully reproduced by the current lightweight renderer.
+
+## Example
+
+The bundled example intentionally demonstrates only these two features:
+
+- **Show/Clear PNG**
+- **Choose .glb and place in AR**
+
+Repository: https://github.com/NafimAhmed/ar-tryon-view
