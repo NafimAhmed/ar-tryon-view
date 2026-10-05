@@ -1,95 +1,6 @@
-//
-//
-// import 'package:flutter/material.dart';
-// import 'package:ar_tryon_view/ar_tryon_view.dart';
-// import 'package:permission_handler/permission_handler.dart';
-// import 'package:flutter/services.dart';
-//
-// void main() => runApp(const MyApp());
-//
-// class MyApp extends StatefulWidget {
-//   const MyApp({super.key});
-//
-//   @override
-//   State<MyApp> createState() => _MyAppState();
-// }
-//
-// class _MyAppState extends State<MyApp> {
-//   ArTryOnController? controller;
-//
-//   Future<void> _startSafely() async {
-//     final status = await Permission.camera.request();
-//     if (!status.isGranted) {
-//       if (!mounted) return;
-//       ScaffoldMessenger.of(context).showSnackBar(
-//         const SnackBar(content: Text('Camera permission denied')),
-//       );
-//       return;
-//     }
-//
-//     try {
-//       await controller?.start();
-//     } on PlatformException catch (e) {
-//       if (!mounted) return;
-//       ScaffoldMessenger.of(context).showSnackBar(
-//         SnackBar(content: Text('Start failed: ${e.code}')),
-//       );
-//     }
-//   }
-//
-//   Future<void> _stopSafely() async {
-//     try {
-//       await controller?.stop();
-//     } on PlatformException {}
-//   }
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     return MaterialApp(
-//       home: Scaffold(
-//         appBar: AppBar(title: const Text('AR Try-on Demo')),
-//         body: Column(
-//           children: [
-//             Expanded(
-//               child: ArTryOnView(
-//                 onCreated: (c) async {
-//                   controller = c;
-//                   await _startSafely(); // auto start after permission
-//                 },
-//               ),
-//             ),
-//             Padding(
-//               padding: const EdgeInsets.all(12),
-//               child: Row(
-//                 mainAxisAlignment: MainAxisAlignment.spaceAround,
-//                 children: [
-//                   ElevatedButton(
-//                     onPressed: _startSafely,
-//                     child: const Text('Start'),
-//                   ),
-//                   ElevatedButton(
-//                     onPressed: _stopSafely,
-//                     child: const Text('Stop'),
-//                   ),
-//                   ElevatedButton(
-//                     onPressed: () async {
-//                       await controller?.setEffectAsset('assets/glasses_01.png');
-//                     },
-//                     child: const Text('Effect'),
-//                   ),
-//                 ],
-//               ),
-//             ),
-//           ],
-//         ),
-//       ),
-//     );
-//   }
-// }
-
+import 'package:ar_tryon_view/ar_tryon_view.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:ar_tryon_view/ar_tryon_view.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -101,57 +12,63 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ MaterialApp provides ScaffoldMessenger
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'AR Try-on Demo',
+      title: 'AR Try-on View',
       theme: ThemeData(useMaterial3: true),
-      home: const TryOnScreen(),
+      home: const DemoScreen(),
     );
   }
 }
 
-class TryOnScreen extends StatefulWidget {
-  const TryOnScreen({super.key});
+class DemoScreen extends StatefulWidget {
+  const DemoScreen({super.key});
 
   @override
-  State<TryOnScreen> createState() => _TryOnScreenState();
+  State<DemoScreen> createState() => _DemoScreenState();
 }
 
-class _TryOnScreenState extends State<TryOnScreen> {
-  ArTryOnController? controller;
+class _DemoScreenState extends State<DemoScreen> {
+  ArTryOnController? _controller;
   bool _starting = false;
-  bool _showGlbMask = false;
 
-  Future<void> _startSafely() async {
+  Future<void> _startCamera() async {
     if (_starting) return;
     _starting = true;
 
     try {
       final status = await Permission.camera.request();
-
-      if (!mounted) return;
-
       if (!status.isGranted) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Camera permission denied')),
         );
         return;
       }
 
-      await controller?.start();
+      await _controller?.start();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Start failed: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Camera start failed: $e')),
+      );
     } finally {
       _starting = false;
     }
   }
 
+  Future<void> _showPngFace() async {
+    try {
+      await _controller?.setEffectAsset('assets/glasses_01.png');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('PNG overlay failed: $e')),
+      );
+    }
+  }
 
-  Future<void> _placeGlbInAr() async {
+  Future<void> _placeGlb() async {
     try {
       final file = await ArGlbPlacement.pickGlb();
       if (file == null) return;
@@ -170,74 +87,71 @@ class _TryOnScreenState extends State<TryOnScreen> {
 
   @override
   void dispose() {
-    // optional safety
-    controller?.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('AR Try-on Demo')),
+      appBar: AppBar(
+        title: const Text('AR Try-on View'),
+        centerTitle: true,
+      ),
       body: Column(
         children: [
           Expanded(
             child: ArTryOnView(
-              glbMask: _showGlbMask
-                  ? const ArTryOnGlbMask.asset(
-                      'assets/bee.glb',
-                      alt: 'Mafia 3D face mask',
-                      widthFactor: 0.62,
-                      heightFactor: 0.42,
-                      alignment: Alignment(0, -0.28),
-                      cameraOrbit: '0deg 75deg 2.2m',
-                      cameraTarget: '0m 0.9m 0m',
-                      fieldOfView: '26deg',
-                    )
-                  : null,
-              onCreated: (c) async {
-                controller = c;
-                // ✅ start after first frame so ScaffoldMessenger definitely exists
+              onCreated: (controller) {
+                _controller = controller;
                 WidgetsBinding.instance.addPostFrameCallback((_) {
-                  _startSafely();
+                  _startCamera();
                 });
               },
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                ElevatedButton(
-                  onPressed: _startSafely,
-                  child: const Text('Start'),
-                ),
-                ElevatedButton(
-                  onPressed: () => controller?.stop(),
-                  child: const Text('Stop'),
-                ),
-                ElevatedButton(
-                  onPressed: () =>
-                      controller?.setEffectAsset('assets/glasses_01.png'),
-                  child: const Text('Effect'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    setState(() => _showGlbMask = !_showGlbMask);
-                  },
-                  child: Text(_showGlbMask ? 'Hide 3D Mask' : 'Show 3D Mask'),
-                ),
-                ElevatedButton(
-                  onPressed: _placeGlbInAr,
-                  child: const Text('Place GLB in AR'),
-                ),
-                ElevatedButton(
-                  onPressed: () => controller?.clearEffect(),
-                  child: const Text('Clear'),
-                ),
-              ],
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    '1. PNG face overlay',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: _showPngFace,
+                          child: const Text('Show PNG'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => _controller?.clearEffect(),
+                          child: const Text('Clear PNG'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    '2. GLB floor placement',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    onPressed: _placeGlb,
+                    icon: const Icon(Icons.view_in_ar),
+                    label: const Text('Choose .glb and place in AR'),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
