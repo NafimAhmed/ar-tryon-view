@@ -1,63 +1,53 @@
-
-
-
-import 'package:flutter/material.dart';
 import 'package:ar_tryon_view/ar_tryon_view.dart';
+import 'package:flutter/material.dart';
 
-void main() => runApp(const MyApp());
+void main() => runApp(const IntegrationDemo());
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class IntegrationDemo extends StatefulWidget {
+  const IntegrationDemo({super.key});
+
+  @override
+  State<IntegrationDemo> createState() => _IntegrationDemoState();
+}
+
+class _IntegrationDemoState extends State<IntegrationDemo> {
+  ArTryOnController? controller;
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(home: Demo());
-  }
-}
-
-class Demo extends StatefulWidget {
-  const Demo({super.key});
-
-  @override
-  State<Demo> createState() => _DemoState();
-}
-
-class _DemoState extends State<Demo> {
-  ArTryOnController? c;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('AR Try-On Plugin Demo')),
-      body: Column(
-        children: [
-          Expanded(
-            child: ArTryOnView(
-              onCreated: (controller) async {
-                c = controller;
-                await c!.start();
-              },
+    return MaterialApp(
+      home: Scaffold(
+        appBar: AppBar(title: const Text('AR Try-On Plugin Demo')),
+        body: Column(
+          children: [
+            Expanded(
+              child: ArTryOnView(
+                onCreated: (c) async {
+                  controller = c;
+                  await controller!.start();
+                },
+              ),
             ),
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              ElevatedButton(
-                onPressed: () => c?.start(),
-                child: const Text('Start'),
-              ),
-              ElevatedButton(
-                onPressed: () => c?.stop(),
-                child: const Text('Stop'),
-              ),
-              ElevatedButton(
-                onPressed: () => c?.setEffect('glasses_01'),
-                child: const Text('Effect'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-        ],
+            Wrap(
+              spacing: 8,
+              children: [
+                ElevatedButton(
+                  onPressed: () =>
+                      controller?.setEffectAsset('assets/glasses_01.png'),
+                  child: const Text('Show PNG'),
+                ),
+                ElevatedButton(
+                  onPressed: () => controller?.clearEffect(),
+                  child: const Text('Clear PNG'),
+                ),
+                ElevatedButton(
+                  onPressed: () => ArGlbPlacement.pickAndOpen(),
+                  child: const Text('Place GLB'),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
