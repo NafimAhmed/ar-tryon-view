@@ -1,12 +1,12 @@
 name: ar_tryon_view
-description: Native camera try-on overlays plus Android ARCore GLB floor placement for Flutter.
+description: Flutter plugin with two features only: PNG camera overlays and Android ARCore GLB floor placement.
 topics:
   - camera
   - camerax
   - ar
   - overlay
   - e-commerce
-version: 0.0.6
+version: 0.0.7
 license: Apache-2.0
 homepage: https://github.com/NafimAhmed/ar-tryon-view
 repository: https://github.com/NafimAhmed/ar-tryon-view
@@ -18,8 +18,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  model_viewer_plus: ^1.9.3
-  plugin_platform_interface: ^2.0.2
 
 dev_dependencies:
   flutter_test:
