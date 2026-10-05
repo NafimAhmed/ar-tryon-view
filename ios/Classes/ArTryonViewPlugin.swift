@@ -115,10 +115,6 @@ final class ArTryOnPlatformView: NSObject, FlutterPlatformView {
       stopCamera()
       result(nil)
 
-    case "setEffect":
-      // optional string-based effect id (not used now)
-      result(nil)
-
     case "setEffectBytes":
       // Flutter Uint8List -> FlutterStandardTypedData
       guard let typed = call.arguments as? FlutterStandardTypedData else {
